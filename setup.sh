@@ -12,9 +12,26 @@ get_input() {
     local prompt="$1"
     local default="$2"
     local input
-    echo -n -e "${YELLOW}${prompt} [${default}]: ${NC}"
-    read input
-    echo "${input:-$default}"
+    
+    while true; do
+        echo -n -e "${YELLOW}${prompt} [${default}]: ${NC}"
+        read input
+        input="${input:-$default}"  # Use default if input is empty
+        
+        # For prefix validation, do it here if this is the prefix prompt
+        if [[ "$prompt" == *"prefix"* ]]; then
+            if [[ "$input" =~ ^[a-zA-Z0-9-]+$ ]]; then
+                echo "$input"
+                return 0
+            else
+                error "Prefix must contain only letters, numbers, and hyphens"
+                continue
+            fi
+        else
+            echo "$input"
+            return 0
+        fi
+    done
 }
 
 # Log functions
@@ -32,15 +49,6 @@ warn() {
 
 requirement_met() {
     echo -e "${BLUE}[✓] Requirement met: $1${NC}"
-}
-
-# Function to validate prefix
-validate_prefix() {
-    local prefix="$1"
-    if [[ ! $prefix =~ ^[a-zA-Z0-9-]+$ ]]; then
-        error "Prefix must contain only letters, numbers, and hyphens"
-        exit 1
-    fi
 }
 
 # Check prerequisites
@@ -89,12 +97,11 @@ setup_aws() {
     
     # Get project prefix
     PROJECT_PREFIX=$(get_input "Enter project prefix (e.g., cloudsectest)" "cloudsectest")
-    validate_prefix "$PROJECT_PREFIX"
     export PROJECT_PREFIX
     
     # Get MongoDB password
     while true; do
-        echo -n -e "${YELLOW}Enter MongoDB password: ${NC}"
+        echo -n -e "${YELLOW}Enter MongoDB password (minimum 8 characters): ${NC}"
         read -s MONGODB_PASSWORD
         echo
         if [[ ${#MONGODB_PASSWORD} -ge 8 ]]; then
@@ -112,6 +119,8 @@ setup_aws() {
         exit 1
     fi
     export AWS_ACCOUNT_ID
+    
+    log "AWS environment configuration complete"
 }
 
 # Setup container registry
@@ -186,6 +195,7 @@ print_urls() {
 
 # Main function
 main() {
+    log "Starting deployment..."
     check_prerequisites
     setup_aws
     setup_project
