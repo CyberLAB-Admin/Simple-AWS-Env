@@ -29,7 +29,7 @@ chmod +x setup.sh cleanup.sh
 
 3. Generate an SSH key pair (if you haven't already):
 ```bash
-ssh-keygen -t rsa -b 4096 -f ~/.ssh/aws-security-test -N ""
+ssh-keygen -t rsa -b 4096 -f ~/.ssh/Simple-AWS-Env -N ""
 ```
 
 4. Run the setup script:
