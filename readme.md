@@ -18,7 +18,7 @@ This repository sets up an intentionally misconfigured AWS infrastructure for se
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/aws-security-test.git
+git clone https://github.com/CyberLAB-Admin/Simple-AWS-Env.git
 cd aws-security-test
 ```
 
