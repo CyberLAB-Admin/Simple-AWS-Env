@@ -26,25 +26,22 @@ get_input() {
     local default="$2"
     local input=""
 
-    while true; do
-        echo -e -n "${YELLOW}${prompt} [${default}]: ${NC}"
-        read -r input
-        
-        # If input is empty, use default
-        if [ -z "$input" ]; then
-            input="$default"
+    # Force a newline and show prompt clearly
+    echo -e "\n${YELLOW}>> ${prompt} [${default}]: ${NC}"
+    read -r input
+    
+    # If input is empty, use default
+    if [ -z "$input" ]; then
+        input="$default"
+    fi
+    
+    # If this is a prefix input, validate it
+    if [[ "$prompt" == *"prefix"* ]]; then
+        if ! [[ "$input" =~ ^[a-zA-Z0-9-]+$ ]]; then
+            error "Prefix must contain only letters, numbers, and hyphens"
+            return 1
         fi
-        
-        # If this is a prefix input, validate it
-        if [[ "$prompt" == *"prefix"* ]]; then
-            if ! [[ "$input" =~ ^[a-zA-Z0-9-]+$ ]]; then
-                error "Prefix must contain only letters, numbers, and hyphens"
-                continue
-            fi
-        fi
-        
-        break
-    done
+    fi
     
     echo "$input"
 }
@@ -92,7 +89,7 @@ setup_aws() {
     # Get MongoDB password with clear prompt
     log "Configuring MongoDB password..."
     while true; do
-        echo -e -n "${YELLOW}Enter MongoDB password (minimum 8 characters): ${NC}"
+        echo -e "\n${YELLOW}>> Enter MongoDB password (minimum 8 characters): ${NC}"
         read -s MONGODB_PASSWORD
         echo
         if [ ${#MONGODB_PASSWORD} -ge 8 ]; then
@@ -117,7 +114,6 @@ setup_aws() {
     log "AWS environment configuration complete"
 }
 
-# Rest of your existing functions remain the same...
 setup_project() {
     log "Setting up project structure..."
     
