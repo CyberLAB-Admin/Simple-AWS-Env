@@ -7,6 +7,65 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
+# Function to collect all required inputs upfront
+collect_inputs() {
+    clear
+    echo -e "${BLUE}=== AWS Environment Setup ===${NC}"
+    echo -e "${YELLOW}Please provide the following information:${NC}\n"
+
+    # AWS Region
+    echo -n "Enter AWS Region [us-west-2]: "
+    read -r AWS_REGION
+    AWS_REGION=${AWS_REGION:-us-west-2}
+    
+    # Project Prefix
+    while true; do
+        echo -n "Enter project prefix [cloudsectest]: "
+        read -r PROJECT_PREFIX
+        PROJECT_PREFIX=${PROJECT_PREFIX:-cloudsectest}
+        
+        if [[ "$PROJECT_PREFIX" =~ ^[a-zA-Z0-9-]+$ ]]; then
+            break
+        else
+            echo -e "${RED}Error: Prefix must contain only letters, numbers, and hyphens${NC}"
+        fi
+    done
+    
+    # MongoDB Password
+    while true; do
+        echo -n "Enter MongoDB password (minimum 8 characters): "
+        read -s MONGODB_PASSWORD
+        echo
+        if [ ${#MONGODB_PASSWORD} -ge 8 ]; then
+            break
+        else
+            echo -e "${RED}Error: Password must be at least 8 characters long${NC}"
+        fi
+    done
+
+    echo -e "\n${GREEN}All inputs collected successfully!${NC}"
+    echo -e "\nProceeding with deployment using:"
+    echo -e "  Region: ${YELLOW}$AWS_REGION${NC}"
+    echo -e "  Prefix: ${YELLOW}$PROJECT_PREFIX${NC}"
+    echo -e "  Password: ${YELLOW}[HIDDEN]${NC}\n"
+    
+    echo -n "Press Enter to continue or Ctrl+C to cancel..."
+    read
+
+    # Export variables
+    export AWS_REGION
+    export PROJECT_PREFIX
+    export MONGODB_PASSWORD
+
+    # Get AWS Account ID
+    AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+    if [ $? -ne 0 ]; then
+        error "Failed to get AWS Account ID. Please ensure AWS credentials are configured."
+        exit 1
+    fi
+    export AWS_ACCOUNT_ID
+}
+
 # Log functions
 log() {
     echo -e "${GREEN}[$(date +'%Y-%m-%dT%H:%M:%S%z')] $1${NC}"
@@ -18,32 +77,6 @@ error() {
 
 warn() {
     echo -e "${YELLOW}[$(date +'%Y-%m-%dT%H:%M:%S%z')] WARNING: $1${NC}"
-}
-
-# Function to get user input with default value
-get_input() {
-    local prompt="$1"
-    local default="$2"
-    local input=""
-
-    # Force a newline and show prompt clearly
-    echo -e "\n${YELLOW}>> ${prompt} [${default}]: ${NC}"
-    read -r input
-    
-    # If input is empty, use default
-    if [ -z "$input" ]; then
-        input="$default"
-    fi
-    
-    # If this is a prefix input, validate it
-    if [[ "$prompt" == *"prefix"* ]]; then
-        if ! [[ "$input" =~ ^[a-zA-Z0-9-]+$ ]]; then
-            error "Prefix must contain only letters, numbers, and hyphens"
-            return 1
-        fi
-    fi
-    
-    echo "$input"
 }
 
 check_prerequisites() {
@@ -63,55 +96,6 @@ check_prerequisites() {
         error "Please install required tools and try again"
         exit 1
     fi
-}
-
-setup_aws() {
-    log "Setting up AWS environment..."
-    
-    # First, verify AWS credentials
-    if ! aws sts get-caller-identity &>/dev/null; then
-        error "AWS credentials not configured. Please run 'aws configure' first."
-        exit 1
-    fi
-    
-    # Get AWS Region with clear prompt
-    log "Configuring AWS Region..."
-    AWS_REGION=$(get_input "Enter AWS Region" "us-west-2")
-    log "Using AWS Region: $AWS_REGION"
-    export AWS_REGION
-    
-    # Get project prefix with clear prompt
-    log "Configuring project prefix..."
-    PROJECT_PREFIX=$(get_input "Enter project prefix (e.g., cloudsectest)" "cloudsectest")
-    log "Using project prefix: $PROJECT_PREFIX"
-    export PROJECT_PREFIX
-    
-    # Get MongoDB password with clear prompt
-    log "Configuring MongoDB password..."
-    while true; do
-        echo -e "\n${YELLOW}>> Enter MongoDB password (minimum 8 characters): ${NC}"
-        read -s MONGODB_PASSWORD
-        echo
-        if [ ${#MONGODB_PASSWORD} -ge 8 ]; then
-            break
-        else
-            error "Password must be at least 8 characters long"
-        fi
-    done
-    export MONGODB_PASSWORD
-    log "MongoDB password set successfully"
-
-    # Get AWS Account ID
-    log "Getting AWS Account ID..."
-    AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-    if [ $? -ne 0 ]; then
-        error "Failed to get AWS Account ID. Please ensure AWS credentials are configured."
-        exit 1
-    fi
-    export AWS_ACCOUNT_ID
-    log "Using AWS Account ID: $AWS_ACCOUNT_ID"
-    
-    log "AWS environment configuration complete"
 }
 
 setup_project() {
@@ -195,9 +179,21 @@ print_urls() {
 }
 
 main() {
+    clear
+    echo -e "${BLUE}AWS Security Testing Infrastructure Setup${NC}\n"
+
+    # First verify AWS credentials
+    if ! aws sts get-caller-identity &>/dev/null; then
+        error "AWS credentials not configured. Please run 'aws configure' first."
+        exit 1
+    }
+
+    # Collect all inputs first
+    collect_inputs
+
+    # Now start the actual deployment with logging
     log "Starting deployment..."
     check_prerequisites
-    setup_aws
     setup_project
     setup_ecr
     build_push_container
