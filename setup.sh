@@ -186,7 +186,7 @@ main() {
     if ! aws sts get-caller-identity &>/dev/null; then
         error "AWS credentials not configured. Please run 'aws configure' first."
         exit 1
-    }
+    fi
 
     # Collect all inputs first
     collect_inputs
@@ -202,4 +202,5 @@ main() {
     print_urls
 }
 
+# Run main function
 main
