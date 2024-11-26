@@ -8,7 +8,8 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 # Function to collect all required inputs upfront
-collect_inputs() {
+collect_inputs
+{
     clear
     echo -e "${BLUE}=== AWS Environment Setup ===${NC}"
     echo -e "${YELLOW}Please provide the following information:${NC}\n"
@@ -67,19 +68,23 @@ collect_inputs() {
 }
 
 # Log functions
-log() {
+log
+{
     echo -e "${GREEN}[$(date +'%Y-%m-%dT%H:%M:%S%z')] $1${NC}"
 }
 
-error() {
+error
+{
     echo -e "${RED}[$(date +'%Y-%m-%dT%H:%M:%S%z')] ERROR: $1${NC}" >&2
 }
 
-warn() {
+warn
+{
     echo -e "${YELLOW}[$(date +'%Y-%m-%dT%H:%M:%S%z')] WARNING: $1${NC}"
 }
 
-check_prerequisites() {
+check_prerequisites
+{
     log "Checking prerequisites..."
     
     local REQUIRED_TOOLS="aws terraform docker kubectl jq git"
@@ -98,7 +103,8 @@ check_prerequisites() {
     fi
 }
 
-setup_project() {
+setup_project
+{
     log "Setting up project structure..."
     
     # Create directories
@@ -113,7 +119,8 @@ setup_project() {
     rm -rf app/.git
 }
 
-setup_ecr() {
+setup_ecr
+{
     log "Setting up ECR repository..."
     
     aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
@@ -123,7 +130,8 @@ setup_ecr() {
     aws ecr create-repository --repository-name ${PROJECT_PREFIX}-webapp --region $AWS_REGION
 }
 
-build_push_container() {
+build_push_container
+{
     log "Building and pushing container..."
     
     cd app
@@ -133,7 +141,8 @@ build_push_container() {
     cd ..
 }
 
-deploy_infrastructure() {
+deploy_infrastructure
+{
     log "Deploying infrastructure..."
     
     # Export Terraform variables
@@ -155,7 +164,8 @@ deploy_infrastructure() {
     cd ..
 }
 
-setup_kubernetes() {
+setup_kubernetes
+{
     log "Configuring Kubernetes..."
     
     # Update kubeconfig
@@ -168,7 +178,8 @@ setup_kubernetes() {
     kubectl rollout status deployment/tasky
 }
 
-print_urls() {
+print_urls
+{
     log "Getting deployment URLs..."
     
     TASKY_URL=$(kubectl get service tasky-service -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
@@ -178,7 +189,8 @@ print_urls() {
     echo -e "${YELLOW}Tasky Web Server URL:${NC} http://$TASKY_URL"
 }
 
-main() {
+main
+{
     clear
     echo -e "${BLUE}AWS Security Testing Infrastructure Setup${NC}\n"
 
