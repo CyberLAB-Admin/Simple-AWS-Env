@@ -191,7 +191,7 @@ resource "aws_instance" "mongodb" {
   ami           = "ami-0735c191cf914754d"
   instance_type = "t2.micro"
   subnet_id     = aws_subnet.public.id
-  key_name      = "aws-security-test"
+  key_name      = "Simple-AWS-Env"
   
   iam_instance_profile = aws_iam_instance_profile.ec2_profile.name
   vpc_security_group_ids = [aws_security_group.mongodb.id]
@@ -268,7 +268,7 @@ resource "aws_config_configuration_recorder" "config" {
 
   recording_group {
     all_supported = true
-    include_global_resources = true
+    include_global_resource_types = true
   }
 }
 
