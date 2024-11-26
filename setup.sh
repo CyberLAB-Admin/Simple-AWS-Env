@@ -7,33 +7,6 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-# Function to get user input with default value
-get_input() {
-    local prompt="$1"
-    local default="$2"
-    local input
-    
-    while true; do
-        echo -n -e "${YELLOW}${prompt} [${default}]: ${NC}"
-        read input
-        input="${input:-$default}"  # Use default if input is empty
-        
-        # For prefix validation, do it here if this is the prefix prompt
-        if [[ "$prompt" == *"prefix"* ]]; then
-            if [[ "$input" =~ ^[a-zA-Z0-9-]+$ ]]; then
-                echo "$input"
-                return 0
-            else
-                error "Prefix must contain only letters, numbers, and hyphens"
-                continue
-            fi
-        else
-            echo "$input"
-            return 0
-        fi
-    done
-}
-
 # Log functions
 log() {
     echo -e "${GREEN}[$(date +'%Y-%m-%dT%H:%M:%S%z')] $1${NC}"
@@ -47,11 +20,35 @@ warn() {
     echo -e "${YELLOW}[$(date +'%Y-%m-%dT%H:%M:%S%z')] WARNING: $1${NC}"
 }
 
-requirement_met() {
-    echo -e "${BLUE}[✓] Requirement met: $1${NC}"
+# Function to get user input with default value
+get_input() {
+    local prompt="$1"
+    local default="$2"
+    local input=""
+
+    while true; do
+        echo -e -n "${YELLOW}${prompt} [${default}]: ${NC}"
+        read -r input
+        
+        # If input is empty, use default
+        if [ -z "$input" ]; then
+            input="$default"
+        fi
+        
+        # If this is a prefix input, validate it
+        if [[ "$prompt" == *"prefix"* ]]; then
+            if ! [[ "$input" =~ ^[a-zA-Z0-9-]+$ ]]; then
+                error "Prefix must contain only letters, numbers, and hyphens"
+                continue
+            fi
+        fi
+        
+        break
+    done
+    
+    echo "$input"
 }
 
-# Check prerequisites
 check_prerequisites() {
     log "Checking prerequisites..."
     
@@ -71,7 +68,56 @@ check_prerequisites() {
     fi
 }
 
-# Setup project structure
+setup_aws() {
+    log "Setting up AWS environment..."
+    
+    # First, verify AWS credentials
+    if ! aws sts get-caller-identity &>/dev/null; then
+        error "AWS credentials not configured. Please run 'aws configure' first."
+        exit 1
+    fi
+    
+    # Get AWS Region with clear prompt
+    log "Configuring AWS Region..."
+    AWS_REGION=$(get_input "Enter AWS Region" "us-west-2")
+    log "Using AWS Region: $AWS_REGION"
+    export AWS_REGION
+    
+    # Get project prefix with clear prompt
+    log "Configuring project prefix..."
+    PROJECT_PREFIX=$(get_input "Enter project prefix (e.g., cloudsectest)" "cloudsectest")
+    log "Using project prefix: $PROJECT_PREFIX"
+    export PROJECT_PREFIX
+    
+    # Get MongoDB password with clear prompt
+    log "Configuring MongoDB password..."
+    while true; do
+        echo -e -n "${YELLOW}Enter MongoDB password (minimum 8 characters): ${NC}"
+        read -s MONGODB_PASSWORD
+        echo
+        if [ ${#MONGODB_PASSWORD} -ge 8 ]; then
+            break
+        else
+            error "Password must be at least 8 characters long"
+        fi
+    done
+    export MONGODB_PASSWORD
+    log "MongoDB password set successfully"
+
+    # Get AWS Account ID
+    log "Getting AWS Account ID..."
+    AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+    if [ $? -ne 0 ]; then
+        error "Failed to get AWS Account ID. Please ensure AWS credentials are configured."
+        exit 1
+    fi
+    export AWS_ACCOUNT_ID
+    log "Using AWS Account ID: $AWS_ACCOUNT_ID"
+    
+    log "AWS environment configuration complete"
+}
+
+# Rest of your existing functions remain the same...
 setup_project() {
     log "Setting up project structure..."
     
@@ -87,43 +133,6 @@ setup_project() {
     rm -rf app/.git
 }
 
-# Configure AWS environment
-setup_aws() {
-    log "Setting up AWS environment..."
-    
-    # Get AWS Region
-    AWS_REGION=$(get_input "Enter AWS Region" "us-west-2")
-    export AWS_REGION
-    
-    # Get project prefix
-    PROJECT_PREFIX=$(get_input "Enter project prefix (e.g., cloudsectest)" "cloudsectest")
-    export PROJECT_PREFIX
-    
-    # Get MongoDB password
-    while true; do
-        echo -n -e "${YELLOW}Enter MongoDB password (minimum 8 characters): ${NC}"
-        read -s MONGODB_PASSWORD
-        echo
-        if [[ ${#MONGODB_PASSWORD} -ge 8 ]]; then
-            break
-        else
-            error "Password must be at least 8 characters long"
-        fi
-    done
-    export MONGODB_PASSWORD
-
-    # Get AWS Account ID
-    AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-    if [ $? -ne 0 ]; then
-        error "Failed to get AWS Account ID. Please ensure AWS credentials are configured."
-        exit 1
-    fi
-    export AWS_ACCOUNT_ID
-    
-    log "AWS environment configuration complete"
-}
-
-# Setup container registry
 setup_ecr() {
     log "Setting up ECR repository..."
     
@@ -134,7 +143,6 @@ setup_ecr() {
     aws ecr create-repository --repository-name ${PROJECT_PREFIX}-webapp --region $AWS_REGION
 }
 
-# Build and push container
 build_push_container() {
     log "Building and pushing container..."
     
@@ -145,7 +153,6 @@ build_push_container() {
     cd ..
 }
 
-# Deploy infrastructure
 deploy_infrastructure() {
     log "Deploying infrastructure..."
     
@@ -168,7 +175,6 @@ deploy_infrastructure() {
     cd ..
 }
 
-# Configure Kubernetes
 setup_kubernetes() {
     log "Configuring Kubernetes..."
     
@@ -182,7 +188,6 @@ setup_kubernetes() {
     kubectl rollout status deployment/tasky
 }
 
-# Get deployment URLs
 print_urls() {
     log "Getting deployment URLs..."
     
@@ -193,7 +198,6 @@ print_urls() {
     echo -e "${YELLOW}Tasky Web Server URL:${NC} http://$TASKY_URL"
 }
 
-# Main function
 main() {
     log "Starting deployment..."
     check_prerequisites
@@ -206,5 +210,4 @@ main() {
     print_urls
 }
 
-# Run main function
 main
