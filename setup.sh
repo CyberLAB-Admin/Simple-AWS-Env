@@ -163,7 +163,6 @@ deploy_infrastructure() {
     export TF_VAR_mongodb_password=$MONGODB_PASSWORD
     export TF_VAR_aws_region=$AWS_REGION
     export TF_VAR_aws_account_id=$AWS_ACCOUNT_ID
-    export TF_VAR_create_config_recorder=false  # Disable config recorder by default
     
     # Initialize and check for existing resources
     terraform init || error "Terraform init failed"
@@ -171,14 +170,11 @@ deploy_infrastructure() {
     # Try importing existing resources before applying
     {
         terraform import aws_s3_bucket.db_backups "${PROJECT_PREFIX}-db-backups" 
-        terraform import aws_s3_bucket.config "${PROJECT_PREFIX}-config-logs"
         terraform import aws_key_pair.mongodb_key "Simple-AWS-Env"
         terraform import aws_iam_role.ec2_role "${PROJECT_PREFIX}-ec2-role"
-        terraform import aws_iam_role.config_role "${PROJECT_PREFIX}-config-role"
         terraform import aws_iam_instance_profile.ec2_profile "${PROJECT_PREFIX}-ec2-profile"
-    } 2>/dev/null || true  # Suppress import errors
+    } 2>/dev/null || true
     
-    # Apply with auto-approve
     terraform apply -auto-approve || error "Terraform apply failed"
     
     # Get outputs
