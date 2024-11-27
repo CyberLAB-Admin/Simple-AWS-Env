@@ -7,9 +7,22 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
+# Log functions
+log() {
+    echo -e "${GREEN}[$(date +'%Y-%m-%dT%H:%M:%S%z')] $1${NC}"
+}
+
+error() {
+    echo -e "${RED}[$(date +'%Y-%m-%dT%H:%M:%S%z')] ERROR: $1${NC}" >&2
+    exit 1
+}
+
+warn() {
+    echo -e "${YELLOW}[$(date +'%Y-%m-%dT%H:%M:%S%z')] WARNING: $1${NC}"
+}
+
 # Function to collect all required inputs upfront
-collect_inputs
-{
+collect_inputs() {
     clear
     echo -e "${BLUE}=== AWS Environment Setup ===${NC}"
     echo -e "${YELLOW}Please provide the following information:${NC}\n"
@@ -28,7 +41,7 @@ collect_inputs
         if [[ "$PROJECT_PREFIX" =~ ^[a-zA-Z0-9-]+$ ]]; then
             break
         else
-            echo -e "${RED}Error: Prefix must contain only letters, numbers, and hyphens${NC}"
+            error "Prefix must contain only letters, numbers, and hyphens"
         fi
     done
     
@@ -40,7 +53,7 @@ collect_inputs
         if [ ${#MONGODB_PASSWORD} -ge 8 ]; then
             break
         else
-            echo -e "${RED}Error: Password must be at least 8 characters long${NC}"
+            error "Password must be at least 8 characters long"
         fi
     done
 
@@ -53,38 +66,17 @@ collect_inputs
     echo -n "Press Enter to continue or Ctrl+C to cancel..."
     read
 
+    # Get AWS Account ID
+    AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text) || error "Failed to get AWS Account ID"
+    
     # Export variables
     export AWS_REGION
     export PROJECT_PREFIX
     export MONGODB_PASSWORD
-
-    # Get AWS Account ID
-    AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-    if [ $? -ne 0 ]; then
-        error "Failed to get AWS Account ID. Please ensure AWS credentials are configured."
-        exit 1
-    fi
     export AWS_ACCOUNT_ID
 }
 
-# Log functions
-log
-{
-    echo -e "${GREEN}[$(date +'%Y-%m-%dT%H:%M:%S%z')] $1${NC}"
-}
-
-error
-{
-    echo -e "${RED}[$(date +'%Y-%m-%dT%H:%M:%S%z')] ERROR: $1${NC}" >&2
-}
-
-warn
-{
-    echo -e "${YELLOW}[$(date +'%Y-%m-%dT%H:%M:%S%z')] WARNING: $1${NC}"
-}
-
-check_prerequisites
-{
+check_prerequisites() {
     log "Checking prerequisites..."
     
     local REQUIRED_TOOLS="aws terraform docker kubectl jq git"
@@ -98,51 +90,43 @@ check_prerequisites
 
     if [ ${#MISSING_TOOLS[@]} -ne 0 ]; then
         error "Missing required tools: ${MISSING_TOOLS[*]}"
-        error "Please install required tools and try again"
-        exit 1
     fi
 }
 
-setup_project
-{
+setup_project() {
     log "Setting up project structure..."
     
-    # Create directories
-    mkdir -p kubernetes
-    mkdir -p app
-
-    # Clone Tasky repository
     log "Cloning Tasky repository..."
-    git clone https://github.com/jeffthorne/tasky.git app/
+    git clone https://github.com/jeffthorne/tasky.git app/ || error "Failed to clone Tasky repository"
     
-    # Cleanup git directory
-    rm -rf app/.git
+    log "Cleaning up git directory..."
+    rm -rf app/.git || error "Failed to clean up git directory"
 }
 
-setup_ecr
-{
+setup_ecr() {
     log "Setting up ECR repository..."
     
-    aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+    aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com || error "Failed to authenticate with ECR"
     
     # Create repository if it doesn't exist
     aws ecr describe-repositories --repository-names ${PROJECT_PREFIX}-webapp --region $AWS_REGION || \
-    aws ecr create-repository --repository-name ${PROJECT_PREFIX}-webapp --region $AWS_REGION
+    aws ecr create-repository --repository-name ${PROJECT_PREFIX}-webapp --region $AWS_REGION || \
+    error "Failed to create ECR repository"
 }
 
-build_push_container
-{
+build_push_container() {
     log "Building and pushing container..."
     
-    cd app
-    docker build -t ${PROJECT_PREFIX}-webapp .
-    docker tag ${PROJECT_PREFIX}-webapp:latest $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/${PROJECT_PREFIX}-webapp:latest
-    docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/${PROJECT_PREFIX}-webapp:latest
-    cd ..
+    cd app || error "Failed to change to app directory"
+    
+    docker build -t ${PROJECT_PREFIX}-webapp . || error "Docker build failed"
+    docker tag ${PROJECT_PREFIX}-webapp:latest $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/${PROJECT_PREFIX}-webapp:latest || error "Docker tag failed"
+    docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/${PROJECT_PREFIX}-webapp:latest || error "Docker push failed"
+    
+    cd .. || error "Failed to return to root directory"
 }
 
-deploy_infrastructure
-{
+deploy_infrastructure() {
     log "Deploying infrastructure..."
     
     # Export Terraform variables
@@ -151,61 +135,55 @@ deploy_infrastructure
     export TF_VAR_aws_region=$AWS_REGION
     export TF_VAR_aws_account_id=$AWS_ACCOUNT_ID
     
-    # Initialize and apply Terraform
-    cd terraform
-    terraform init
-    terraform apply -auto-approve
+    cd terraform || error "Failed to change to terraform directory"
+    
+    terraform init || error "Terraform init failed"
+    terraform apply -auto-approve || error "Terraform apply failed"
     
     # Get outputs
-    MONGODB_IP=$(terraform output -raw mongodb_ip)
-    S3_BUCKET_URL=$(terraform output -raw s3_bucket_url)
+    MONGODB_IP=$(terraform output -raw mongodb_ip) || error "Failed to get MongoDB IP"
+    S3_BUCKET_URL=$(terraform output -raw s3_bucket_url) || error "Failed to get S3 bucket URL"
     export MONGODB_IP
     export S3_BUCKET_URL
-    cd ..
+    
+    cd .. || error "Failed to return to root directory"
 }
 
-setup_kubernetes
-{
+setup_kubernetes() {
     log "Configuring Kubernetes..."
     
-    # Update kubeconfig
-    aws eks update-kubeconfig --name ${PROJECT_PREFIX}-eks-cluster --region $AWS_REGION
+    aws eks update-kubeconfig --name ${PROJECT_PREFIX}-eks-cluster --region $AWS_REGION || \
+    error "Failed to update kubeconfig"
     
-    # Replace variables in Kubernetes config
-    envsubst < kubernetes/deployment.yaml | kubectl apply -f -
+    envsubst < kubernetes/deployment.yaml | kubectl apply -f - || \
+    error "Failed to apply Kubernetes configuration"
     
-    # Wait for deployment
-    kubectl rollout status deployment/tasky
+    kubectl rollout status deployment/tasky || \
+    error "Failed to deploy Tasky application"
 }
 
-print_urls
-{
+print_urls() {
     log "Getting deployment URLs..."
     
-    TASKY_URL=$(kubectl get service tasky-service -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+    TASKY_URL=$(kubectl get service tasky-service -o jsonpath='{.status.loadBalancer.ingress[0].hostname}') || \
+    error "Failed to get Tasky URL"
     
     echo -e "\n${GREEN}Deployment Complete!${NC}"
     echo -e "${YELLOW}S3 Bucket URL:${NC} $S3_BUCKET_URL"
     echo -e "${YELLOW}Tasky Web Server URL:${NC} http://$TASKY_URL"
 }
 
-main
-{
+main() {
     clear
     echo -e "${BLUE}AWS Security Testing Infrastructure Setup${NC}\n"
 
     # First verify AWS credentials
-    if ! aws sts get-caller-identity &>/dev/null; then
-        error "AWS credentials not configured. Please run 'aws configure' first."
-        exit 1
-    fi
+    aws sts get-caller-identity &>/dev/null || \
+    error "AWS credentials not configured. Please run 'aws configure' first."
 
-    # Collect all inputs first
-    collect_inputs
-
-    # Now start the actual deployment with logging
-    log "Starting deployment..."
+    # Run each step, checking for errors
     check_prerequisites
+    collect_inputs
     setup_project
     setup_ecr
     build_push_container
