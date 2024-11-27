@@ -193,9 +193,6 @@ deploy_infrastructure() {
 setup_kubernetes() {
     log "Configuring Kubernetes..."
     
-setup_kubernetes() {
-    log "Configuring Kubernetes..."
-    
     aws eks update-kubeconfig --name ${PROJECT_PREFIX}-eks-cluster --region $AWS_REGION || \
     error "Failed to update kubeconfig"
     
