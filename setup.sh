@@ -156,16 +156,33 @@ build_push_container() {
 deploy_infrastructure() {
     log "Deploying infrastructure..."
     
+    cd terraform || error "Failed to change to terraform directory"
+    
     # Export Terraform variables
     export TF_VAR_project_prefix=$PROJECT_PREFIX
     export TF_VAR_mongodb_password=$MONGODB_PASSWORD
     export TF_VAR_aws_region=$AWS_REGION
     export TF_VAR_aws_account_id=$AWS_ACCOUNT_ID
     
-    cd terraform || error "Failed to change to terraform directory"
-    
+    # Initialize Terraform
     terraform init || error "Terraform init failed"
-    terraform apply -auto-approve || error "Terraform apply failed"
+    
+    # Plan first to check for changes
+    terraform plan -out=tfplan || error "Terraform plan failed"
+    
+    # Apply with auto-approve
+    terraform apply -auto-approve tfplan || {
+        warn "Some resources already exist, attempting to continue..."
+        # Import existing resources if needed
+        terraform import aws_s3_bucket.db_backups "${PROJECT_PREFIX}-db-backups" || true
+        terraform import aws_s3_bucket.config "${PROJECT_PREFIX}-config-logs" || true
+        terraform import aws_key_pair.mongodb_key "Simple-AWS-Env" || true
+        terraform import aws_iam_role.ec2_role "${PROJECT_PREFIX}-ec2-role" || true
+        terraform import aws_iam_role.config_role "${PROJECT_PREFIX}-config-role" || true
+        
+        # Try apply again
+        terraform apply -auto-approve || error "Terraform apply failed after importing resources"
+    }
     
     # Get outputs
     MONGODB_IP=$(terraform output -raw mongodb_ip) || error "Failed to get MongoDB IP"

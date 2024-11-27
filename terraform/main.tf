@@ -85,6 +85,11 @@ resource "aws_s3_bucket" "db_backups" {
   bucket = "${var.project_prefix}-db-backups"
   force_destroy = true
 
+  lifecycle {
+    prevent_destroy = false
+    ignore_changes = [server_side_encryption_configuration]
+  }
+
   tags = {
     Name = "${var.project_prefix}-db-backups"
   }
@@ -121,11 +126,19 @@ resource "aws_s3_bucket_policy" "allow_public_read" {
 resource "aws_key_pair" "mongodb_key" {
   key_name   = "Simple-AWS-Env"
   public_key = file("${path.module}/Simple-AWS-Env.pub")
+
+  lifecycle {
+    ignore_changes = [public_key]
+  }
 }
 
 # IAM Role for EC2
 resource "aws_iam_role" "ec2_role" {
   name = "${var.project_prefix}-ec2-role"
+  
+  lifecycle {
+    ignore_changes = [assume_role_policy]
+  }
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -266,6 +279,9 @@ module "eks" {
     }
   }
 
+  create_cloudwatch_log_group = false
+  create_kms_key             = false
+
   tags = {
     Name = "${var.project_prefix}-eks"
   }
@@ -302,11 +318,20 @@ resource "aws_config_delivery_channel" "config" {
 resource "aws_s3_bucket" "config" {
   bucket        = "${var.project_prefix}-config-logs"
   force_destroy = true
+
+  lifecycle {
+    prevent_destroy = false
+    ignore_changes = [server_side_encryption_configuration]
+  }
 }
 
 # IAM Role for AWS Config
 resource "aws_iam_role" "config_role" {
   name = "${var.project_prefix}-config-role"
+
+  lifecycle {
+    ignore_changes = [assume_role_policy]
+  }
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
