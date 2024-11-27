@@ -163,36 +163,36 @@ deploy_infrastructure() {
     export TF_VAR_mongodb_password=$MONGODB_PASSWORD
     export TF_VAR_aws_region=$AWS_REGION
     export TF_VAR_aws_account_id=$AWS_ACCOUNT_ID
+    export TF_VAR_create_config_recorder=false  # Disable config recorder by default
     
-    # Initialize Terraform
+    # Initialize and check for existing resources
     terraform init || error "Terraform init failed"
     
-    # Plan first to check for changes
-    terraform plan -out=tfplan || error "Terraform plan failed"
+    # Try importing existing resources before applying
+    {
+        terraform import aws_s3_bucket.db_backups "${PROJECT_PREFIX}-db-backups" 
+        terraform import aws_s3_bucket.config "${PROJECT_PREFIX}-config-logs"
+        terraform import aws_key_pair.mongodb_key "Simple-AWS-Env"
+        terraform import aws_iam_role.ec2_role "${PROJECT_PREFIX}-ec2-role"
+        terraform import aws_iam_role.config_role "${PROJECT_PREFIX}-config-role"
+        terraform import aws_iam_instance_profile.ec2_profile "${PROJECT_PREFIX}-ec2-profile"
+    } 2>/dev/null || true  # Suppress import errors
     
     # Apply with auto-approve
-    terraform apply -auto-approve tfplan || {
-        warn "Some resources already exist, attempting to continue..."
-        # Import existing resources if needed
-        terraform import aws_s3_bucket.db_backups "${PROJECT_PREFIX}-db-backups" || true
-        terraform import aws_s3_bucket.config "${PROJECT_PREFIX}-config-logs" || true
-        terraform import aws_key_pair.mongodb_key "Simple-AWS-Env" || true
-        terraform import aws_iam_role.ec2_role "${PROJECT_PREFIX}-ec2-role" || true
-        terraform import aws_iam_role.config_role "${PROJECT_PREFIX}-config-role" || true
-        
-        # Try apply again
-        terraform apply -auto-approve || error "Terraform apply failed after importing resources"
-    }
+    terraform apply -auto-approve || error "Terraform apply failed"
     
     # Get outputs
-    MONGODB_IP=$(terraform output -raw mongodb_ip) || error "Failed to get MongoDB IP"
-    S3_BUCKET_URL=$(terraform output -raw s3_bucket_url) || error "Failed to get S3 bucket URL"
+    MONGODB_IP=$(terraform output -raw mongodb_ip)
+    S3_BUCKET_URL=$(terraform output -raw s3_bucket_url)
     export MONGODB_IP
     export S3_BUCKET_URL
     
-    cd .. || error "Failed to return to root directory"
+    cd ..
 }
 
+setup_kubernetes() {
+    log "Configuring Kubernetes..."
+    
 setup_kubernetes() {
     log "Configuring Kubernetes..."
     
