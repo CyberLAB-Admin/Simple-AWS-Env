@@ -251,9 +251,10 @@ module "eks" {
   cluster_endpoint_public_access = true
 
   # Configuration to handle existing resources
+  manage_aws_auth_configmap = true
   create_cloudwatch_log_group = false
   create_kms_key             = false
-  cluster_encryption_config   = {}  # Disable default encryption config
+  cluster_encryption_config   = {}
 
   eks_managed_node_groups = {
     main = {
@@ -268,6 +269,7 @@ module "eks" {
 
   tags = {
     Name = "${var.project_prefix}-eks"
+    Environment = "lab"
   }
 }
 

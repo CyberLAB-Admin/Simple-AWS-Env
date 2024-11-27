@@ -173,9 +173,15 @@ deploy_infrastructure() {
         terraform import aws_key_pair.mongodb_key "Simple-AWS-Env"
         terraform import aws_iam_role.ec2_role "${PROJECT_PREFIX}-ec2-role"
         terraform import aws_iam_instance_profile.ec2_profile "${PROJECT_PREFIX}-ec2-profile"
+        terraform import "module.eks.aws_eks_cluster.this[0]" "${PROJECT_PREFIX}-eks-cluster" || true
     } 2>/dev/null || true
     
-    terraform apply -auto-approve || error "Terraform apply failed"
+    # Apply with auto-approve and handle errors
+    if ! terraform apply -auto-approve; then
+        warn "Initial apply failed, attempting to import EKS cluster..."
+        terraform import "module.eks.aws_eks_cluster.this[0]" "${PROJECT_PREFIX}-eks-cluster" || true
+        terraform apply -auto-approve || error "Terraform apply failed"
+    fi
     
     # Get outputs
     MONGODB_IP=$(terraform output -raw mongodb_ip)
