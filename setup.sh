@@ -81,6 +81,7 @@ check_prerequisites() {
     
     local REQUIRED_TOOLS="aws terraform docker kubectl jq git"
     local MISSING_TOOLS=()
+    local CURRENT_USER=$(whoami)
 
     for tool in $REQUIRED_TOOLS; do
         if ! command -v $tool &> /dev/null; then
@@ -91,12 +92,22 @@ check_prerequisites() {
     if [ ${#MISSING_TOOLS[@]} -ne 0 ]; then
         error "Missing required tools: ${MISSING_TOOLS[*]}"
     fi
+
+    # Check Docker permissions
+    if ! docker info &>/dev/null; then
+        error "Docker permission denied. Please ensure you have Docker installed and your user is in the docker group.
+        
+Run this command to fix:
+    sudo usermod -aG docker ${CURRENT_USER}
+    newgrp docker
+        
+Note: You may need to log out and log back in for changes to take effect."
+    fi
 }
 
 setup_project() {
     log "Setting up project structure..."
     
-    log "Cloning Tasky repository into a temporary directory..."
     git clone https://github.com/jeffthorne/tasky.git /tmp/tasky || error "Failed to clone Tasky repository"
     
     log "Copying contents to the app directory..."
