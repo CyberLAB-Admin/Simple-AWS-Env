@@ -289,32 +289,7 @@ module "eks" {
   }
 }
 
-# AWS Config Configuration Recorder
-resource "aws_config_configuration_recorder" "config" {
-
-  recording_group {
-    all_supported                 = true
-    include_global_resource_types = true
-  }
-
-  lifecycle {
-    prevent_destroy = true
-  }
-}
-
-resource "aws_config_configuration_recorder_status" "config" {
-  name       = aws_config_configuration_recorder.config.name
-  is_enabled = true
-}
-
-resource "aws_config_delivery_channel" "config" {
-  name           = "${var.project_prefix}-config-channel"
-  s3_bucket_name = aws_s3_bucket.config.id
-
-  depends_on = [aws_config_configuration_recorder_status.config]
-}
-
-# AWS Config S3 Bucket
+# AWS Config S3 Bucket (move this before the recorder)
 resource "aws_s3_bucket" "config" {
   bucket        = "${var.project_prefix}-config-logs"
   force_destroy = true
@@ -325,13 +300,9 @@ resource "aws_s3_bucket" "config" {
   }
 }
 
-# IAM Role for AWS Config
+# IAM Role for AWS Config (move this before the recorder)
 resource "aws_iam_role" "config_role" {
   name = "${var.project_prefix}-config-role"
-
-  lifecycle {
-    ignore_changes = [assume_role_policy]
-  }
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -343,11 +314,68 @@ resource "aws_iam_role" "config_role" {
       }
     ]
   })
+
+  lifecycle {
+    ignore_changes = [assume_role_policy]
+  }
+}
+
+# Add S3 bucket policy for AWS Config
+resource "aws_iam_role_policy" "config_s3_policy" {
+  name = "${var.project_prefix}-config-s3-policy"
+  role = aws_iam_role.config_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject",
+          "s3:GetBucketAcl"
+        ]
+        Resource = [
+          aws_s3_bucket.config.arn,
+          "${aws_s3_bucket.config.arn}/*"
+        ]
+      }
+    ]
+  })
 }
 
 resource "aws_iam_role_policy_attachment" "config_policy" {
   role       = aws_iam_role.config_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWS_ConfigRole"
+}
+
+# AWS Config Configuration Recorder
+resource "aws_config_configuration_recorder" "config" {
+  name     = "${var.project_prefix}-config-recorder"
+  role_arn = aws_iam_role.config_role.arn
+
+  recording_group {
+    all_supported                 = true
+    include_global_resource_types = true
+  }
+
+  depends_on = [aws_iam_role_policy_attachment.config_policy]
+
+  lifecycle {
+    prevent_destroy = false  # Change this to false to allow updates
+  }
+}
+
+# The rest of the AWS Config resources
+resource "aws_config_configuration_recorder_status" "config" {
+  name       = aws_config_configuration_recorder.config.name
+  is_enabled = true
+  depends_on = [aws_config_configuration_recorder.config]
+}
+
+resource "aws_config_delivery_channel" "config" {
+  name           = "${var.project_prefix}-config-channel"
+  s3_bucket_name = aws_s3_bucket.config.id
+  depends_on     = [aws_config_configuration_recorder.config]
 }
 
 # Outputs
