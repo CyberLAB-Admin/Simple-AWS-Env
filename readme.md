@@ -27,17 +27,12 @@ cd Simple-AWS-Env
 chmod +x setup.sh cleanup.sh
 ```
 
-3. Generate an SSH key pair:
-```bash
-ssh-keygen -t rsa -b 4096 -f terraform/Simple-AWS-Env -N ""
-```
-
-4. Add the user to the docker group:
+3. Add the user to the docker group:
 ```bash
 #You must log out and log back in again after running this command.
 sudo usermod -aG docker $(whoami)
 ```
-5. Run the setup script:
+4. Run the setup script:
 ```bash
 ./setup.sh
 ```

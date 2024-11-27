@@ -108,6 +108,16 @@ Note: You may need to log out and log back in for changes to take effect."
 setup_project() {
     log "Setting up project structure..."
     
+    # Create necessary directories
+    mkdir -p terraform app kubernetes || error "Failed to create project directories"
+    
+    # Generate SSH key if it doesn't exist
+    if [ ! -f "terraform/Simple-AWS-Env.pub" ]; then
+        log "Generating SSH key pair..."
+        ssh-keygen -t rsa -b 4096 -f terraform/Simple-AWS-Env -N "" || error "Failed to generate SSH key"
+    fi
+    
+    log "Cloning Tasky repository into a temporary directory..."
     git clone https://github.com/jeffthorne/tasky.git /tmp/tasky || error "Failed to clone Tasky repository"
     
     log "Copying contents to the app directory..."

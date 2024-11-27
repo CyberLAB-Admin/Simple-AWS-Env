@@ -117,11 +117,15 @@ resource "aws_s3_bucket_policy" "allow_public_read" {
   })
 }
 
+// ...existing code...
+
 # Create SSH key pair
 resource "aws_key_pair" "mongodb_key" {
   key_name   = "Simple-AWS-Env"
-  public_key = file("${path.module}/ssh_key.pub")  # You'll need to create this file
+  public_key = file("${path.module}/Simple-AWS-Env.pub")
 }
+
+// ...existing code...
 
 # IAM Role for EC2
 resource "aws_iam_role" "ec2_role" {
