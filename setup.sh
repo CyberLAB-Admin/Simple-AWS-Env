@@ -164,24 +164,32 @@ deploy_infrastructure() {
     export TF_VAR_aws_region=$AWS_REGION
     export TF_VAR_aws_account_id=$AWS_ACCOUNT_ID
     
-    # Initialize and check for existing resources
+    # Initialize Terraform
     terraform init || error "Terraform init failed"
     
-    # Try importing existing resources before applying
-    {
-        terraform import aws_s3_bucket.db_backups "${PROJECT_PREFIX}-db-backups" 
-        terraform import aws_key_pair.mongodb_key "Simple-AWS-Env"
-        terraform import aws_iam_role.ec2_role "${PROJECT_PREFIX}-ec2-role"
-        terraform import aws_iam_instance_profile.ec2_profile "${PROJECT_PREFIX}-ec2-profile"
-        terraform import "module.eks.aws_eks_cluster.this[0]" "${PROJECT_PREFIX}-eks-cluster" || true
-    } 2>/dev/null || true
+    # Function to import a resource if it exists
+    import_if_exists() {
+        RESOURCE_TYPE=$1
+        RESOURCE_NAME=$2
+        IMPORT_ID=$3
+        
+        if aws $RESOURCE_TYPE describe $RESOURCE_NAME --region $AWS_REGION &>/dev/null; then
+            log "Importing existing $RESOURCE_TYPE: $RESOURCE_NAME"
+            terraform import $RESOURCE_TYPE.$RESOURCE_NAME $IMPORT_ID || warn "Failed to import $RESOURCE_TYPE: $RESOURCE_NAME"
+        else
+            log "$RESOURCE_TYPE $RESOURCE_NAME does not exist. It will be created."
+        fi
+    }
     
-    # Apply with auto-approve and handle errors
-    if ! terraform apply -auto-approve; then
-        warn "Initial apply failed, attempting to import EKS cluster..."
-        terraform import "module.eks.aws_eks_cluster.this[0]" "${PROJECT_PREFIX}-eks-cluster" || true
-        terraform apply -auto-approve || error "Terraform apply failed"
-    fi
+    # Import existing resources
+    import_if_exists "s3api head-bucket --bucket" "aws_s3_bucket.db_backups" "${PROJECT_PREFIX}-db-backups"
+    import_if_exists "ec2 describe-key-pairs --key-name" "aws_key_pair.mongodb_key" "Simple-AWS-Env"
+    import_if_exists "iam get-role --role-name" "aws_iam_role.ec2_role" "${PROJECT_PREFIX}-ec2-role"
+    import_if_exists "iam get-instance-profile --instance-profile-name" "aws_iam_instance_profile.ec2_profile" "${PROJECT_PREFIX}-ec2-profile"
+    import_if_exists "eks describe-cluster --name" "module.eks.aws_eks_cluster.this[0]" "${PROJECT_PREFIX}-eks-cluster"
+    
+    # Apply Terraform configuration
+    terraform apply -auto-approve || error "Terraform apply failed"
     
     # Get outputs
     MONGODB_IP=$(terraform output -raw mongodb_ip)
