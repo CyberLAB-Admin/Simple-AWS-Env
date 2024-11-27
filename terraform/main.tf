@@ -268,6 +268,11 @@ module "eks" {
 
   cluster_endpoint_public_access = true
 
+  # Add explicit cluster encryption configuration
+  cluster_encryption_config = {
+    resources = ["secrets"]
+  }
+
   eks_managed_node_groups = {
     main = {
       min_size     = 1
@@ -279,9 +284,6 @@ module "eks" {
     }
   }
 
-  create_cloudwatch_log_group = false
-  create_kms_key             = false
-
   tags = {
     Name = "${var.project_prefix}-eks"
   }
@@ -289,8 +291,6 @@ module "eks" {
 
 # AWS Config Configuration Recorder
 resource "aws_config_configuration_recorder" "config" {
-  name     = "${var.project_prefix}-config-recorder"
-  role_arn = aws_iam_role.config_role.arn
 
   recording_group {
     all_supported                 = true
