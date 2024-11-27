@@ -195,8 +195,17 @@ setup_kubernetes() {
     envsubst < kubernetes/deployment.yaml | kubectl apply -f - || \
     error "Failed to apply Kubernetes configuration"
     
-    kubectl rollout status deployment/tasky || \
-    error "Failed to deploy Tasky application"
+    # Add debugging steps
+    sleep 30  # Give pods time to start
+    log "Checking pod status..."
+    kubectl get pods
+    kubectl describe pods -l app=tasky
+    
+    kubectl rollout status deployment/tasky || {
+        warn "Deployment failed, checking logs..."
+        kubectl logs -l app=tasky
+        error "Failed to deploy Tasky application"
+    }
 }
 
 print_urls() {
