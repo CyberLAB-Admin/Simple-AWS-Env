@@ -96,11 +96,14 @@ check_prerequisites() {
 setup_project() {
     log "Setting up project structure..."
     
-    log "Cloning Tasky repository..."
-    git clone https://github.com/jeffthorne/tasky.git app/ --no-checkout || error "Failed to clone Tasky repository"
+    log "Cloning Tasky repository into a temporary directory..."
+    git clone https://github.com/jeffthorne/tasky.git /tmp/tasky || error "Failed to clone Tasky repository"
     
-    log "Checking out files into existing directory..."
-    git --git-dir=app/.git --work-tree=app checkout -f || error "Failed to checkout files"
+    log "Copying contents to the app directory..."
+    cp -r /tmp/tasky/* app/ || error "Failed to copy contents to app directory"
+    
+    log "Cleaning up temporary directory..."
+    rm -rf /tmp/tasky || error "Failed to clean up temporary directory"
     
     log "Cleaning up git directory..."
     rm -rf app/.git || error "Failed to clean up git directory"
