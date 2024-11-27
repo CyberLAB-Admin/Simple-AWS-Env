@@ -125,9 +125,9 @@ build_push_container() {
     
     cd app || error "Failed to change to app directory"
     
-    sudo docker build -t ${PROJECT_PREFIX}-webapp . || error "Docker build failed"
-    sudo docker tag ${PROJECT_PREFIX}-webapp:latest $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/${PROJECT_PREFIX}-webapp:latest || error "Docker tag failed"
-    sudo docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/${PROJECT_PREFIX}-webapp:latest || error "Docker push failed"
+    docker build -t ${PROJECT_PREFIX}-webapp . || error "Docker build failed"
+    docker tag ${PROJECT_PREFIX}-webapp:latest $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/${PROJECT_PREFIX}-webapp:latest || error "Docker tag failed"
+    docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/${PROJECT_PREFIX}-webapp:latest || error "Docker push failed"
     
     cd .. || error "Failed to return to root directory"
 }
