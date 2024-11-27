@@ -45,15 +45,16 @@ resource "aws_internet_gateway" "main" {
   }
 }
 
-# Public Subnet
+# Public Subnets (now we create two)
 resource "aws_subnet" "public" {
+  count                   = 2
   vpc_id                  = aws_vpc.main.id
-  cidr_block              = "10.0.1.0/24"
-  availability_zone       = "${var.aws_region}a"
+  cidr_block              = "10.0.${count.index + 1}.0/24"
+  availability_zone       = "${var.aws_region}${count.index == 0 ? "a" : "b"}"
   map_public_ip_on_launch = true
 
   tags = {
-    Name = "${var.project_prefix}-public-subnet"
+    Name = "${var.project_prefix}-public-subnet-${count.index + 1}"
     "kubernetes.io/role/elb" = "1"
   }
 }
@@ -72,8 +73,10 @@ resource "aws_route_table" "public" {
   }
 }
 
+# Route Table Association (updated for multiple subnets)
 resource "aws_route_table_association" "public" {
-  subnet_id      = aws_subnet.public.id
+  count          = 2
+  subnet_id      = aws_subnet.public[count.index].id
   route_table_id = aws_route_table.public.id
 }
 
@@ -98,6 +101,7 @@ resource "aws_s3_bucket_public_access_block" "db_backups" {
 
 resource "aws_s3_bucket_policy" "allow_public_read" {
   bucket = aws_s3_bucket.db_backups.id
+  depends_on = [aws_s3_bucket_public_access_block.db_backups]
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -111,6 +115,12 @@ resource "aws_s3_bucket_policy" "allow_public_read" {
       },
     ]
   })
+}
+
+# Create SSH key pair
+resource "aws_key_pair" "mongodb_key" {
+  key_name   = "Simple-AWS-Env"
+  public_key = file("${path.module}/ssh_key.pub")  # You'll need to create this file
 }
 
 # IAM Role for EC2
@@ -186,12 +196,12 @@ resource "aws_security_group" "mongodb" {
   }
 }
 
-# EC2 Instance for MongoDB
+# EC2 Instance for MongoDB (update subnet reference)
 resource "aws_instance" "mongodb" {
   ami           = "ami-0735c191cf914754d"
   instance_type = "t2.micro"
-  subnet_id     = aws_subnet.public.id
-  key_name      = "Simple-AWS-Env"
+  subnet_id     = aws_subnet.public[0].id
+  key_name      = aws_key_pair.mongodb_key.key_name
   
   iam_instance_profile = aws_iam_instance_profile.ec2_profile.name
   vpc_security_group_ids = [aws_security_group.mongodb.id]
@@ -241,7 +251,7 @@ module "eks" {
   cluster_version = "1.27"
 
   vpc_id     = aws_vpc.main.id
-  subnet_ids = [aws_subnet.public.id]
+  subnet_ids = aws_subnet.public[*].id
 
   cluster_endpoint_public_access = true
 
@@ -297,6 +307,19 @@ resource "aws_iam_role_policy_attachment" "config_policy" {
 resource "aws_config_configuration_recorder_status" "config" {
   name       = aws_config_configuration_recorder.config.name
   is_enabled = true
+}
+
+# AWS Config Delivery Channel
+resource "aws_s3_bucket" "config" {
+  bucket        = "${var.project_prefix}-config-logs"
+  force_destroy = true
+}
+
+resource "aws_config_delivery_channel" "config" {
+  name           = "${var.project_prefix}-config-channel"
+  s3_bucket_name = aws_s3_bucket.config.id
+
+  depends_on = [aws_config_configuration_recorder.config]
 }
 
 # Outputs
