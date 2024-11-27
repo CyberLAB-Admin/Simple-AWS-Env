@@ -271,34 +271,27 @@ module "eks" {
   }
 }
 
-
-# Check for existing Configuration Recorder
-data "aws_config_configuration_recorder" "existing" {
-  name = "${var.project_prefix}-config-recorder"
-}
-
-# Create Configuration Recorder only if it doesn't exist
+# AWS Config Configuration Recorder
 resource "aws_config_configuration_recorder" "config" {
-  count    = length(data.aws_config_configuration_recorder.existing.name) == 0 ? 1 : 0
   name     = "${var.project_prefix}-config-recorder"
   role_arn = aws_iam_role.config_role.arn
 
   recording_group {
-    all_supported             = true
+    all_supported                 = true
     include_global_resource_types = true
+  }
+
+  lifecycle {
+    prevent_destroy = true
   }
 }
 
-# Enable the Configuration Recorder if it was created
 resource "aws_config_configuration_recorder_status" "config" {
-  count      = aws_config_configuration_recorder.config.count
-  name       = aws_config_configuration_recorder.config.count > 0 ? aws_config_configuration_recorder.config[0].name : data.aws_config_configuration_recorder.existing.name
+  name       = aws_config_configuration_recorder.config.name
   is_enabled = true
 }
 
-# Create Delivery Channel only if Recorder was created
 resource "aws_config_delivery_channel" "config" {
-  count          = aws_config_configuration_recorder_status.config.count
   name           = "${var.project_prefix}-config-channel"
   s3_bucket_name = aws_s3_bucket.config.id
 
@@ -331,7 +324,6 @@ resource "aws_iam_role_policy_attachment" "config_policy" {
   role       = aws_iam_role.config_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWS_ConfigRole"
 }
-
 
 # Outputs
 output "mongodb_ip" {
