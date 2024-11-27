@@ -117,15 +117,11 @@ resource "aws_s3_bucket_policy" "allow_public_read" {
   })
 }
 
-// ...existing code...
-
 # Create SSH key pair
 resource "aws_key_pair" "mongodb_key" {
   key_name   = "Simple-AWS-Env"
   public_key = file("${path.module}/Simple-AWS-Env.pub")
 }
-
-// ...existing code...
 
 # IAM Role for EC2
 resource "aws_iam_role" "ec2_role" {
@@ -275,17 +271,47 @@ module "eks" {
   }
 }
 
-# AWS Config
+
+# Check for existing Configuration Recorder
+data "aws_config_configuration_recorder" "existing" {
+  name = "${var.project_prefix}-config-recorder"
+}
+
+# Create Configuration Recorder only if it doesn't exist
 resource "aws_config_configuration_recorder" "config" {
+  count    = length(data.aws_config_configuration_recorder.existing.name) == 0 ? 1 : 0
   name     = "${var.project_prefix}-config-recorder"
   role_arn = aws_iam_role.config_role.arn
 
   recording_group {
-    all_supported = true
+    all_supported             = true
     include_global_resource_types = true
   }
 }
 
+# Enable the Configuration Recorder if it was created
+resource "aws_config_configuration_recorder_status" "config" {
+  count      = aws_config_configuration_recorder.config.count
+  name       = aws_config_configuration_recorder.config.count > 0 ? aws_config_configuration_recorder.config[0].name : data.aws_config_configuration_recorder.existing.name
+  is_enabled = true
+}
+
+# Create Delivery Channel only if Recorder was created
+resource "aws_config_delivery_channel" "config" {
+  count          = aws_config_configuration_recorder_status.config.count
+  name           = "${var.project_prefix}-config-channel"
+  s3_bucket_name = aws_s3_bucket.config.id
+
+  depends_on = [aws_config_configuration_recorder_status.config]
+}
+
+# AWS Config S3 Bucket
+resource "aws_s3_bucket" "config" {
+  bucket        = "${var.project_prefix}-config-logs"
+  force_destroy = true
+}
+
+# IAM Role for AWS Config
 resource "aws_iam_role" "config_role" {
   name = "${var.project_prefix}-config-role"
 
@@ -293,11 +319,9 @@ resource "aws_iam_role" "config_role" {
     Version = "2012-10-17"
     Statement = [
       {
-        Action = "sts:AssumeRole"
-        Effect = "Allow"
-        Principal = {
-          Service = "config.amazonaws.com"
-        }
+        Effect    = "Allow"
+        Principal = { Service = "config.amazonaws.com" }
+        Action    = "sts:AssumeRole"
       }
     ]
   })
@@ -308,23 +332,6 @@ resource "aws_iam_role_policy_attachment" "config_policy" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWS_ConfigRole"
 }
 
-resource "aws_config_configuration_recorder_status" "config" {
-  name       = aws_config_configuration_recorder.config.name
-  is_enabled = true
-}
-
-# AWS Config Delivery Channel
-resource "aws_s3_bucket" "config" {
-  bucket        = "${var.project_prefix}-config-logs"
-  force_destroy = true
-}
-
-resource "aws_config_delivery_channel" "config" {
-  name           = "${var.project_prefix}-config-channel"
-  s3_bucket_name = aws_s3_bucket.config.id
-
-  depends_on = [aws_config_configuration_recorder.config]
-}
 
 # Outputs
 output "mongodb_ip" {
